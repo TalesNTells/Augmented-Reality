@@ -15,16 +15,14 @@
     /* no-flash theme, identical to the main site */
     (function () { try { if (localStorage.getItem('theme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) {} })();
   </script>
-  <!-- Start downloading the AR engine while the visitor is still reading the page -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.module.js" crossorigin />
-  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js" crossorigin />
+  <link rel="preconnect" href="https://unpkg.com" crossorigin />
   <!-- AR libraries. MindAR version here must match compilerUrl in /js/config.js -->
   <script type="importmap">
     {
       "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.147.0/examples/jsm/",
+        "three": "https://unpkg.com/three@0.147.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.147.0/examples/jsm/",
         "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
       }
     }
@@ -117,6 +115,7 @@
     <div class="stage__error" id="stageError" hidden>
       <div class="eyebrow" style="margin:0">Something went wrong</div>
       <p id="stageErrorText"></p>
+      <p class="mono" id="stageErrorDetail" style="font-size:11px;opacity:.55;word-break:break-word"></p>
       <div class="row" style="justify-content:center">
         <button class="btn" id="retryBtn" type="button">Try again</button>
         <button class="btn btn--ghost" id="errCloseBtn" type="button">Close</button>

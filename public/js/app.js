@@ -35,6 +35,8 @@ let session = null; // the running AR session
 let startToken = 0; // lets us abandon a start that the user cancelled
 let muted = true;
 let wakeLock = null;
+let lastErrorWasEngine = false;
+const RETRY_KEY = 'tnt-retry-camera';
 
 /* ------------------------------ loading ----------------------------- */
 async function load() {
@@ -53,7 +55,13 @@ async function load() {
     const plan = scanPlan();
     if (plan) {
       $('startBtn').disabled = false;
-      scheduleWarmUp();
+      let retry = false;
+      try {
+        retry = sessionStorage.getItem(RETRY_KEY) === '1';
+        sessionStorage.removeItem(RETRY_KEY);
+      } catch { /* ignore */ }
+      if (retry) startAR();
+      else scheduleWarmUp();
     }
     else if (!SLUG) {
       $('gLede').textContent = 'No artwork has been brought to life yet. Check back soon — the first ones are on their way.';
@@ -163,8 +171,7 @@ function scheduleWarmUp() {
     warmUp().catch(() => {});
     prefetchTarget();
   };
-  if ('requestIdleCallback' in window) requestIdleCallback(go, { timeout: 1500 });
-  else setTimeout(go, 400);
+  setTimeout(go, 50);
 }
 
 /* ------------------------------ AR stage ---------------------------- */
@@ -349,6 +356,8 @@ async function startAR() {
     $('stage').hidden = false;
     $('loading').dataset.done = 'true';
     $('stageErrorText').textContent = friendlyError(e);
+    $('stageErrorDetail').textContent = String((e && (e.message || e.name)) || e).slice(0, 220);
+    lastErrorWasEngine = /dynamically imported|Failed to fetch|importmap|resolve module|module specifier/i.test(String((e && e.message) || e));
     $('stageError').hidden = false;
   } finally {
     if (earlyObserver) earlyObserver.disconnect();
@@ -566,7 +575,15 @@ $('startBtn').addEventListener('click', () => {
 });
 $('closeBtn').addEventListener('click', () => stopAR());
 $('errCloseBtn').addEventListener('click', () => stopAR());
-$('retryBtn').addEventListener('click', () => startAR());
+$('retryBtn').addEventListener('click', () => {
+  if (lastErrorWasEngine) {
+    // Browsers remember a failed module download until the page reloads, so reload and reopen the camera.
+    try { sessionStorage.setItem(RETRY_KEY, '1'); } catch { /* ignore */ }
+    location.reload();
+    return;
+  }
+  startAR();
+});
 $('soundBtn').addEventListener('click', () => {
   muted = !muted;
   updateSoundBtn();

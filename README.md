@@ -2,7 +2,7 @@
 
 A small AR site that brings your registered artworks to life through the phone camera.
 
-- **Visitors**: scan the QR code next to an artwork with the normal phone camera → this site opens → *"Point your camera at the artwork"* → the animation plays on top of the art and stays locked to it. Or open the site directly and point the camera at any registered artwork.
+- **Visitors**: open the site (or scan the QR code next to an artwork with the normal phone camera) → tap **Open camera** → point it at any registered artwork → the animation plays on top of the art and stays locked to it. A QR code is just a shortcut: it opens the same camera page with that artwork's preview, and the camera still recognises *every* registered artwork, QR code or not.
 - **You**: log in to `/admin`, upload the artwork photo + its animation video, get the QR code. That's it.
 
 Only artworks you have registered are recognised. Anything else does nothing.
@@ -86,7 +86,7 @@ vercel.json              /a/<slug> and /admin routes
 ```
 
 - Each artwork gets its own tracking file (fast, used by its QR page) **and** is included in one combined file (used by the main scanner). The combined file is rebuilt in the admin's browser whenever an artwork is added, changed or removed — with dozens of artworks, expect that step to take a minute or two.
-- The AR libraries (MindAR 1.2.5, three.js 0.147) load from jsDelivr/unpkg. If you ever change the MindAR version, change it in **both** `public/index.html` (the import map) and `public/js/config.js` (`compilerUrl`), then press **Rebuild scanner** in the admin and re-save artworks whose tracking data was built with the old version.
+- QR codes are generated inside the site (`public/js/qr.js`, no outside library). The AR libraries (MindAR 1.2.5, three.js 0.147) load from jsDelivr/unpkg. If you ever change the MindAR version, change it in **both** `public/index.html` (the import map) and `public/js/config.js` (`compilerUrl`), then press **Rebuild scanner** in the admin and re-save artworks whose tracking data was built with the old version.
 - Security: the admin is protected by a password and a signed, HTTP-only cookie; all admin writes also need a custom header; uploaded paths and URLs are validated. Artwork images and videos are, by design, publicly readable (visitors' phones must load them).
 
 ## Known limits

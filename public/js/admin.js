@@ -9,6 +9,7 @@
 
 import { CONFIG } from './config.js';
 import { ICONS, initTheme, el } from './ui.js';
+import { drawQr, qrSvg } from './qr.js';
 
 const root = document.getElementById('root');
 initTheme(document.getElementById('themeToggle'));
@@ -45,26 +46,6 @@ function toast(msg) {
 
 const rand = () => Math.random().toString(36).slice(2, 10);
 const publicUrl = (a) => `${location.origin}/a/${a.slug}`;
-
-// Classic <script> loader (used for the QR library). Remembers the in-flight promise so
-// two callers share one load, and forgets failures so a retry really retries.
-const scriptLoads = new Map();
-function loadScript(src) {
-  if (scriptLoads.has(src)) return scriptLoads.get(src);
-  const p = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = resolve;
-    s.onerror = () => {
-      s.remove();
-      scriptLoads.delete(src);
-      reject(new Error(`Couldn’t load a required library (${new URL(src).hostname}). Check your internet connection.`));
-    };
-    document.head.append(s);
-  });
-  scriptLoads.set(src, p);
-  return p;
-}
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -626,24 +607,29 @@ async function openQr(a) {
     el('p', { class: 'help', style: 'margin-top:16px', text: 'Print it at least 2.5 cm (1 inch) wide and place it next to the artwork. Scanning it with the phone’s normal camera opens this artwork’s AR page.' })
   );
   try {
-    await loadScript(CONFIG.qrUrl);
-    await window.QRCode.toCanvas(canvas, url, { width: 520, margin: 1, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } });
+    drawQr(canvas, url, { ecc: 'Q', pixels: 780, dark: '#000000', light: '#ffffff' });
   } catch (e) {
-    body.replaceChildren(el('p', { class: 'notice notice--err', text: e.message }));
+    body.replaceChildren(el('p', { class: 'notice notice--err', text: `Couldn’t draw the QR code: ${e.message}` }));
+  }
+  function saveBlob(blob, name) {
+    const href = URL.createObjectURL(blob);
+    const link = el('a', { href, download: name });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(href), 10000);
   }
   async function download(kind) {
     try {
-      await loadScript(CONFIG.qrUrl);
-      let href;
-      if (kind === 'png') href = await window.QRCode.toDataURL(url, { width: 1200, margin: 4, errorCorrectionLevel: 'M' });
-      else {
-        const svg = await window.QRCode.toString(url, { type: 'svg', margin: 4, errorCorrectionLevel: 'M' });
-        href = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+      if (kind === 'png') {
+        const big = document.createElement('canvas');
+        drawQr(big, url, { ecc: 'Q', pixels: 1600, dark: '#000000', light: '#ffffff' });
+        const blob = await new Promise((res) => big.toBlob(res, 'image/png'));
+        saveBlob(blob, `qr-${a.slug}.png`);
+      } else {
+        const svg = qrSvg(url, { ecc: 'Q', dark: '#000000', light: '#ffffff' });
+        saveBlob(new Blob([svg], { type: 'image/svg+xml' }), `qr-${a.slug}.svg`);
       }
-      const link = el('a', { href, download: `qr-${a.slug}.${kind}` });
-      document.body.append(link);
-      link.click();
-      link.remove();
     } catch (e) {
       alert(e.message);
     }

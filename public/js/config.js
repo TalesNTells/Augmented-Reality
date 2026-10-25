@@ -19,6 +19,5 @@ export const CONFIG = {
   // Libraries (loaded from CDNs in the visitor's browser). Keep the MindAR version identical in
   // the importmap in index.html — the compiled .mind files must match the runtime version.
   compilerUrl: 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js',
-  qrUrl: 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js',
   blobClientUrl: 'https://esm.sh/@vercel/blob@1.1.1/client',
 };

@@ -29,7 +29,8 @@ $('footerLinks').append(
 let stopOrbs = startOrbs($('orbs'));
 
 /* ------------------------------- state ------------------------------ */
-let data = { mode: SLUG ? 'single' : 'all', artworks: [], combined: null };
+// focus = the artwork whose QR code was scanned (if any). The camera still recognises ANY registered artwork.
+let data = { artworks: [], combined: null, focus: null };
 let session = null; // the running AR session
 let startToken = 0; // lets us abandon a start that the user cancelled
 let muted = true;
@@ -38,24 +39,39 @@ let wakeLock = null;
 /* ------------------------------ loading ----------------------------- */
 async function load() {
   try {
+    const r = await fetch('/api/artworks');
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Could not load the artworks.');
+    data.artworks = j.artworks || [];
+    data.combined = j.combined;
     if (SLUG) {
-      const r = await fetch(`/api/artworks?slug=${encodeURIComponent(SLUG)}`);
-      const j = await r.json().catch(() => ({}));
-      if (r.status === 404) return showNotFound(j.error);
-      if (!r.ok) throw new Error(j.error || 'Could not load this artwork.');
-      data.artworks = [j.artwork];
-      showSingle(j.artwork);
-    } else {
-      const r = await fetch('/api/artworks');
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error || 'Could not load the artworks.');
-      data.artworks = j.artworks || [];
-      data.combined = j.combined;
-      showAll();
+      data.focus = data.artworks.find((a) => a.slug === SLUG) || null;
+      if (!data.focus) return showNotFound('This artwork is not registered (or it has been switched off). You can still scan any other registered artwork.');
+      showFocus(data.focus);
+    }
+    showGallery();
+    const plan = scanPlan();
+    if (plan) $('startBtn').disabled = false;
+    else if (!SLUG) {
+      $('gLede').textContent = 'No artwork has been brought to life yet. Check back soon — the first ones are on their way.';
+      $('startBtn').textContent = 'Nothing to scan yet';
     }
   } catch (e) {
     showGateError(e.message || 'Could not load. Check your connection and refresh.');
   }
+}
+
+/** What the camera will look for.
+ *  Normally: every registered artwork (the combined target file).
+ *  Fallback: if the combined file doesn't yet include the QR'd artwork, use that artwork's own file. */
+function scanPlan() {
+  const inCombined = data.artworks.filter((a) => Number.isInteger(a.targetIndex));
+  const focusReady = !data.focus || Number.isInteger(data.focus.targetIndex);
+  if (data.combined && inCombined.length && focusReady) {
+    return { src: data.combined.url, list: inCombined, indexOf: (a) => a.targetIndex };
+  }
+  if (data.focus) return { src: data.focus.mindUrl, list: [data.focus], indexOf: () => 0 };
+  return null;
 }
 
 function showGateError(msg) {
@@ -64,34 +80,24 @@ function showGateError(msg) {
   g.hidden = false;
 }
 
-function showSingle(a) {
+function showFocus(a) {
   document.title = `${a.title} — Tales 'N' Tells AR`;
   $('gEyebrow').textContent = 'You scanned';
   $('gTitle').innerHTML = '';
   $('gTitle').append(document.createTextNode(a.title));
   $('gTitle').classList.add('display--md');
-  $('gLede').textContent = 'Point your camera at this artwork to bring it to life. Hold steady and let it wake up.';
+  $('gLede').textContent = 'Open the camera and point it at this artwork to bring it to life. You can scan any other registered artwork too.';
   $('gTargetImg').src = a.imageUrl;
   $('gTargetImg').alt = a.title;
   $('gTarget').hidden = false;
   $('gLogo').hidden = true;
   $('gTarget').style.position = 'relative';
-  $('startBtn').disabled = false;
-  const more = el('a', { class: 'nav-link', href: '/', text: 'See all registered artworks', style: 'margin-top:22px' });
-  $('gateBody').append(more);
 }
 
-function showAll() {
+function showGallery() {
   const live = data.artworks.filter((a) => Number.isInteger(a.targetIndex));
-  if (!live.length || !data.combined) {
-    $('gLede').textContent = 'No artwork has been brought to life yet. Check back soon — the first ones are on their way.';
-    $('startBtn').textContent = 'Nothing to scan yet';
-    return;
-  }
-  $('startBtn').disabled = false;
-  // gallery
-  const grid = $('galleryGrid');
-  grid.replaceChildren(
+  if (!live.length) return;
+  $('galleryGrid').replaceChildren(
     ...live.map((a) =>
       el(
         'a',
@@ -191,9 +197,10 @@ async function startAR() {
         userMessage: 'This browser can’t open the camera. Try Safari (iPhone) or Chrome (Android).',
       });
 
-    const live = data.artworks.filter((a) => (data.mode === 'single' ? true : Number.isInteger(a.targetIndex)));
-    if (!live.length) throw Object.assign(new Error('none'), { userMessage: 'Nothing to scan yet.' });
-    const targetSrc = data.mode === 'single' ? live[0].mindUrl : data.combined.url;
+    const plan = scanPlan();
+    if (!plan) throw Object.assign(new Error('none'), { userMessage: 'Nothing to scan yet.' });
+    const live = plan.list;
+    const targetSrc = plan.src;
 
     const [THREE, mod] = await Promise.all([import('three'), import('mindar-image-three')]);
     if (token !== startToken) return;
@@ -225,7 +232,7 @@ async function startAR() {
 
     const s = { mindar, renderer, video, items: [], current: null, THREE };
     session = s; // registered immediately so a failed start still releases the camera
-    const wantIndex = (a) => (data.mode === 'single' ? 0 : a.targetIndex);
+    const wantIndex = plan.indexOf;
 
     for (const artwork of live) {
       const tex = new THREE.VideoTexture(video);

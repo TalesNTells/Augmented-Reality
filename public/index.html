@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Tales 'N' Tells — AR</title>
+  <meta name="description" content="Point your camera at a Tales 'N' Tells artwork and watch it come to life." />
+  <meta name="theme-color" content="#0a0a0b" />
+  <link rel="icon" href="/img/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/site.css" />
+  <script>
+    /* no-flash theme, identical to the main site */
+    (function () { try { if (localStorage.getItem('theme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) {} })();
+  </script>
+  <!-- AR libraries. MindAR version here must match compilerUrl in /js/config.js -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.147.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.147.0/examples/jsm/",
+        "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav__inner">
+      <a href="/" aria-label="Tales 'N' Tells AR — home">
+        <img class="logo logo--dark" src="/img/logo-dark.png" alt="Tales 'N' Tells" />
+        <img class="logo logo--light" src="/img/logo-light.png" alt="" aria-hidden="true" />
+      </a>
+      <nav class="nav__links" aria-label="Main">
+        <a class="nav-link" href="/" id="navScan" aria-current="page">Scan</a>
+        <a class="nav-link nav-link--hide-sm" href="#gallery" id="navGallery" hidden>Artworks</a>
+        <a class="nav-link nav-link--hide-sm" id="navMain" hidden>Main site</a>
+        <button class="theme-toggle" id="themeToggle" type="button"></button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- GATE: what people see first -->
+    <section class="gate" id="gate">
+      <canvas class="gate__orbs" id="orbs" aria-hidden="true"></canvas>
+      <div class="gate__mesh mesh-bg" aria-hidden="true"></div>
+      <div class="gate__body" id="gateBody">
+        <span class="eyebrow eyebrow--muted fade-up" id="gEyebrow">Tales 'N' Tells / Augmented</span>
+        <div id="gLogo" class="fade-up">
+          <img class="logo logo--dark gate__logo" src="/img/logo-dark.png" alt="Tales 'N' Tells" />
+          <img class="logo logo--light gate__logo" src="/img/logo-light.png" alt="" aria-hidden="true" />
+        </div>
+        <div id="gTarget" class="gate__target panel fade-up fade-up--2" hidden><img id="gTargetImg" alt="" /></div>
+        <h1 class="display fade-up fade-up--2" id="gTitle">See the art <span class="accent">move.</span></h1>
+        <p class="lede fade-up fade-up--3" id="gLede">Every registered artwork hides a story that moves. Open your camera, point it at the art, and watch it wake up.</p>
+        <div class="gate__cta fade-up fade-up--3">
+          <button class="btn btn--pill" id="startBtn" type="button" disabled>Open camera</button>
+        </div>
+        <p class="gate__error" id="gErr" role="alert" hidden></p>
+        <ol class="steps fade-up fade-up--3">
+          <li><b>1</b> Open camera</li>
+          <li><b>2</b> Point at the art</li>
+          <li><b>3</b> Hold steady</li>
+        </ol>
+        <div class="gate__scroll" id="scrollCue" hidden aria-hidden="true">__ARROW__</div>
+      </div>
+    </section>
+
+    <!-- Registered artworks (main page only) -->
+    <section class="gallery wrap" id="gallery" hidden>
+      <div class="card" style="padding: clamp(24px, 4vw, 48px);">
+        <div class="gallery__head">
+          <span class="eyebrow">Now alive</span>
+          <h2 class="display display--md">Registered <span class="accent">artworks</span></h2>
+          <p class="lede" style="margin-top:14px">These pieces have been brought to life. Find one in the wild, point your camera, and see.</p>
+        </div>
+        <div class="gallery__grid" id="galleryGrid"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- AR STAGE (hidden until the camera starts) -->
+  <div class="stage" id="stage" hidden role="dialog" aria-label="Augmented reality camera">
+    <div class="stage__view" id="stageView"></div>
+    <div class="stage__top">
+      <img class="logo logo--dark" src="/img/logo-dark.png" alt="Tales 'N' Tells" />
+      <button class="icon-btn" id="closeBtn" type="button" aria-label="Close camera"></button>
+    </div>
+    <div class="reticle" id="reticle" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <div class="stage__hint" id="hint">Point your camera at the artwork</div>
+    <div class="stage__bottom">
+      <div class="stage__bar">
+        <div class="chip" id="chip" data-state="scanning"><i class="dot"></i><span id="chipText">Looking for the art…</span></div>
+        <button class="icon-btn" id="soundBtn" type="button" aria-label="Turn sound on"></button>
+      </div>
+    </div>
+    <div class="stage__loading" id="loading">
+      <div class="spinner" aria-hidden="true"></div>
+      <div>
+        <div class="micro" style="letter-spacing:.4em" id="loadText">Waking the art…</div>
+        <p class="micro" style="opacity:.5;margin:10px 0 0;letter-spacing:.2em">Allow camera access when asked</p>
+      </div>
+    </div>
+    <div class="stage__error" id="stageError" hidden>
+      <div class="eyebrow" style="margin:0">Something went wrong</div>
+      <p id="stageErrorText"></p>
+      <div class="row" style="justify-content:center">
+        <button class="btn" id="retryBtn" type="button">Try again</button>
+        <button class="btn btn--ghost" id="errCloseBtn" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="footer__inner">
+      <img class="logo logo--dark" src="/img/logo-dark.png" alt="Tales 'N' Tells" />
+      <img class="logo logo--light" src="/img/logo-light.png" alt="" aria-hidden="true" />
+      <div class="footer__links" id="footerLinks"></div>
+      <div class="mono" style="opacity:.6">© 2026 TALES 'N' TELLS. ALL RIGHTS RESERVED.</div>
+    </div>
+  </footer>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

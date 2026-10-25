@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Admin — Tales 'N' Tells AR</title>
+  <meta name="theme-color" content="#0a0a0b" />
+  <link rel="icon" href="/img/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/site.css" />
+  <script>
+    (function () { try { if (localStorage.getItem('theme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) {} })();
+  </script>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav__inner">
+      <a href="/admin" aria-label="Admin home">
+        <img class="logo logo--dark" src="/img/logo-dark.png" alt="Tales 'N' Tells" />
+        <img class="logo logo--light" src="/img/logo-light.png" alt="" aria-hidden="true" />
+      </a>
+      <nav class="nav__links" aria-label="Admin">
+        <a class="nav-link" href="/" target="_blank" rel="noopener">View site</a>
+        <button class="nav-link" id="logoutBtn" type="button" hidden style="background:none;border:0;cursor:pointer">Log out</button>
+        <button class="theme-toggle" id="themeToggle" type="button"></button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="root"><div class="admin"><p class="micro muted">Loading…</p></div></main>
+
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>

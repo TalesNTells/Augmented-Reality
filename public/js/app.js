@@ -51,7 +51,10 @@ async function load() {
     }
     showGallery();
     const plan = scanPlan();
-    if (plan) $('startBtn').disabled = false;
+    if (plan) {
+      $('startBtn').disabled = false;
+      scheduleWarmUp();
+    }
     else if (!SLUG) {
       $('gLede').textContent = 'No artwork has been brought to life yet. Check back soon — the first ones are on their way.';
       $('startBtn').textContent = 'Nothing to scan yet';
@@ -125,6 +128,45 @@ function showNotFound(msg) {
   b.dataset.nav = '1';
 }
 
+/* --------------------------- warm-up (page load) --------------------------- */
+// Download + compile the AR engine and the target file while the visitor is still on the
+// landing screen, so tapping "Open camera" only has to wait for the camera itself.
+let warmPromise = null;
+function warmUp() {
+  if (!warmPromise) {
+    warmPromise = (async () => {
+      const [THREE, mod] = await Promise.all([import('three'), import('mindar-image-three')]);
+      try {
+        const tf = window.MINDAR && window.MINDAR.IMAGE && window.MINDAR.IMAGE.tf;
+        if (tf && tf.ready) await tf.ready(); // initialise the GPU backend now, not on tap
+      } catch {
+        /* MindAR will initialise it itself */
+      }
+      return { THREE, mod };
+    })();
+    warmPromise.catch(() => {
+      warmPromise = null; // a later tap retries cleanly
+    });
+  }
+  return warmPromise;
+}
+
+function prefetchTarget() {
+  const plan = scanPlan();
+  if (plan) fetch(plan.src).catch(() => {}); // fills the browser cache; MindAR then loads it instantly
+}
+
+function scheduleWarmUp() {
+  const conn = navigator.connection;
+  if (conn && conn.saveData) return; // respect Data Saver
+  const go = () => {
+    warmUp().catch(() => {});
+    prefetchTarget();
+  };
+  if ('requestIdleCallback' in window) requestIdleCallback(go, { timeout: 1500 });
+  else setTimeout(go, 400);
+}
+
 /* ------------------------------ AR stage ---------------------------- */
 function friendlyError(e) {
   const name = e && e.name;
@@ -188,6 +230,7 @@ async function startAR() {
   updateSoundBtn();
   document.body.style.overflow = 'hidden';
   stopOrbs();
+  let earlyObserver = null;
 
   try {
     if (!window.isSecureContext)
@@ -202,8 +245,10 @@ async function startAR() {
     const live = plan.list;
     const targetSrc = plan.src;
 
-    const [THREE, mod] = await Promise.all([import('three'), import('mindar-image-three')]);
+    $('loadText').textContent = 'Loading AR engine…';
+    const { THREE, mod } = await warmUp();
     if (token !== startToken) return;
+    $('loadText').textContent = 'Starting camera…';
     const { MindARThree } = mod;
 
     const mindar = new MindARThree({
@@ -217,6 +262,7 @@ async function startAR() {
       uiError: 'no',
     });
     const { renderer, scene, camera } = mindar;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); // 3x phone screens are needlessly heavy
 
     // One shared <video> plays whichever artwork is currently recognised.
     const video = document.createElement('video');
@@ -259,6 +305,24 @@ async function startAR() {
       if (s.current && video.videoWidth) applyFit(s.current.tex, video.videoWidth, video.videoHeight, s.current.artwork.aspect);
     });
 
+    // Show the live camera the moment it is playing; MindAR keeps finishing its setup behind it.
+    earlyObserver = new MutationObserver(() => {
+      const cam = $('stageView').querySelector('video');
+      if (!cam || cam.dataset.tnt) return;
+      cam.dataset.tnt = '1';
+      const reveal = () => {
+        if (token !== startToken) return;
+        $('loading').dataset.done = 'true';
+        $('reticle').dataset.hidden = 'false';
+        $('hint').dataset.hidden = 'false';
+        setChip('scanning', 'Getting ready…');
+        setupCamera(s);
+      };
+      if (cam.readyState >= 3 && !cam.paused) reveal();
+      else cam.addEventListener('playing', reveal, { once: true });
+    });
+    earlyObserver.observe($('stageView'), { childList: true, subtree: true });
+
     await mindar.start(); // asks for the camera + loads the target file
     if (token !== startToken) return stopAR();
 
@@ -273,6 +337,8 @@ async function startAR() {
     });
 
     requestWakeLock();
+    setupCamera(s);
+    if (!s.items.some((i) => i.on)) setChip('scanning', 'Looking for the art…');
     $('loading').dataset.done = 'true';
     $('reticle').dataset.hidden = 'false';
     $('hint').dataset.hidden = 'false';
@@ -284,6 +350,8 @@ async function startAR() {
     $('loading').dataset.done = 'true';
     $('stageErrorText').textContent = friendlyError(e);
     $('stageError').hidden = false;
+  } finally {
+    if (earlyObserver) earlyObserver.disconnect();
   }
 }
 
@@ -362,6 +430,7 @@ async function stopAR(keepStageOpen = false) {
       try { it.tex.dispose(); it.mat.dispose(); it.geo.dispose(); } catch { /* ignore */ }
     }
   }
+  resetCamera();
   $('stageView').replaceChildren();
   try { if (wakeLock) await wakeLock.release(); } catch { /* ignore */ }
   wakeLock = null;
@@ -370,6 +439,124 @@ async function stopAR(keepStageOpen = false) {
     document.body.style.overflow = '';
     stopOrbs = startOrbs($('orbs'));
   }
+}
+
+/* ------------------------- camera zoom + focus ------------------------- */
+// Real camera zoom/focus where the phone's browser allows it (most Android Chrome-family
+// browsers); on the rest (e.g. iPhone Safari) zoom falls back to a smooth digital zoom.
+const cam = { track: null, caps: {}, zoom: 1, min: 1, max: 3, hw: false, video: null };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+function setupCamera(s) {
+  const video = s.mindar.video;
+  const stream = video && video.srcObject;
+  const track = stream && stream.getVideoTracks && stream.getVideoTracks()[0];
+  if (!track || cam.track === track) return;
+  cam.track = track;
+  cam.video = video;
+  try {
+    cam.caps = track.getCapabilities ? track.getCapabilities() : {};
+  } catch {
+    cam.caps = {};
+  }
+  // Make sure autofocus keeps working (some phones default to a fixed focus).
+  if (cam.caps.focusMode && cam.caps.focusMode.includes('continuous')) {
+    track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+  }
+  const z = cam.caps.zoom;
+  cam.hw = !!(z && typeof z.max === 'number' && z.max > (z.min || 1));
+  cam.min = cam.hw ? z.min || 1 : 1;
+  cam.max = cam.hw ? Math.min(z.max, 5) : 3;
+  const range = $('zoomRange');
+  range.min = cam.min;
+  range.max = cam.max;
+  range.step = (cam.hw && z.step) || 0.1;
+  $('zoomBar').hidden = false;
+  applyZoom(cam.min);
+}
+
+function applyZoom(z) {
+  z = clamp(z, cam.min, cam.max);
+  cam.zoom = z;
+  if (cam.hw && cam.track) cam.track.applyConstraints({ advanced: [{ zoom: z }] }).catch(() => {});
+  else $('stageView').style.transform = z > 1.001 ? `scale(${z})` : '';
+  $('zoomRange').value = String(z);
+  $('zoomLabel').textContent = `${z.toFixed(1)}\u00d7`;
+}
+
+function resetCamera() {
+  cam.track = null;
+  cam.video = null;
+  cam.caps = {};
+  cam.zoom = 1;
+  $('zoomBar').hidden = true;
+  $('stageView').style.transform = '';
+}
+
+let focusTimer;
+function tapFocus(x, y) {
+  const ring = el('div', { class: 'focus-ring' });
+  ring.style.left = `${x}px`;
+  ring.style.top = `${y}px`;
+  document.querySelectorAll('.focus-ring').forEach((r) => r.remove());
+  $('stage').append(ring);
+  setTimeout(() => ring.remove(), 1000);
+
+  const track = cam.track;
+  if (!track) return;
+  const adv = {};
+  const supported = (navigator.mediaDevices.getSupportedConstraints && navigator.mediaDevices.getSupportedConstraints()) || {};
+  if (supported.pointsOfInterest && cam.video) {
+    const r = cam.video.getBoundingClientRect();
+    adv.pointsOfInterest = [{ x: clamp((x - r.left) / r.width, 0, 1), y: clamp((y - r.top) / r.height, 0, 1) }];
+  }
+  const modes = cam.caps.focusMode || [];
+  if (modes.includes('single-shot')) adv.focusMode = 'single-shot';
+  if (!Object.keys(adv).length) return; // this phone refuses manual focus; continuous autofocus is doing its job
+  track.applyConstraints({ advanced: [adv] }).catch(() => {});
+  clearTimeout(focusTimer);
+  focusTimer = setTimeout(() => {
+    if (cam.track === track && modes.includes('continuous')) track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+  }, 2500);
+}
+
+// pinch to zoom, tap to focus
+{
+  const stage = $('stage');
+  const pts = new Map();
+  let pinch = null;
+  let tap = null;
+  const dist = () => {
+    const [a, b] = [...pts.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y) || 1;
+  };
+  const onUi = (e) => e.target.closest('button, input, .zoombar');
+  stage.addEventListener('pointerdown', (e) => {
+    if (onUi(e)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) {
+      pinch = { d: dist(), z: cam.zoom };
+      tap = null;
+    } else if (pts.size === 1) tap = { x: e.clientX, y: e.clientY, t: Date.now() };
+  });
+  stage.addEventListener('pointermove', (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pts.size === 2) applyZoom(pinch.z * (dist() / pinch.d));
+    else if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 12) tap = null;
+  });
+  const end = (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId);
+    if (pts.size < 2) pinch = null;
+    if (tap && e.type === 'pointerup' && Date.now() - tap.t < 450) tapFocus(tap.x, tap.y);
+    tap = null;
+  };
+  stage.addEventListener('pointerup', end);
+  stage.addEventListener('pointercancel', end);
+  $('zoomRange').addEventListener('input', (e) => applyZoom(parseFloat(e.target.value)));
+  $('zoomIn').addEventListener('click', () => applyZoom(cam.zoom + 0.5));
+  $('zoomOut').addEventListener('click', () => applyZoom(cam.zoom - 0.5));
 }
 
 /* ------------------------------ events ------------------------------ */

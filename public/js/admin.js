@@ -119,6 +119,25 @@ function trackingHint(canvas) {
   return { level: 'poor', text: 'Very little fine detail or contrast (large flat areas). The camera may struggle to lock on. A busier, higher-contrast image tracks far better.' };
 }
 
+/** Shrink an image for MindAR (longest side <= CONFIG.trackingImageMax). Smaller targets load faster
+ *  and match faster on the phone; the full-size picture is still what visitors see. */
+async function shrinkForTracking(img) {
+  const max = CONFIG.trackingImageMax || 800;
+  const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  if (scale >= 1) return img;
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.naturalWidth * scale);
+  c.height = Math.round(img.naturalHeight * scale);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+  const url = URL.createObjectURL(blob);
+  try {
+    return await loadImage(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 /* ----------------------------- MindAR compile ----------------------------- */
 // MindAR 1.2.5 ships mindar-image.prod.js as an ES *module* (export { Controller, Compiler, UI }),
 // so it must be import()ed — a plain <script> tag can't read it.
@@ -218,7 +237,7 @@ async function rebuildCombined(ui, base = 0, span = 100) {
   }
   ui && ui.set('Loading artwork images…', at(2));
   const imgs = [];
-  for (const a of arts) imgs.push(await loadImage(a.imageUrl));
+  for (const a of arts) imgs.push(await shrinkForTracking(await loadImage(a.imageUrl)));
   const blob = await compileTargets(imgs, (p) => ui && ui.set(`Building the all-artworks scanner… ${Math.round(p)}%`, at(5 + p * 0.75)));
   ui && ui.set('Uploading scanner file…', at(85));
   const url = await uploadFile(`tnt-ar/combined/${Date.now()}-${rand()}.mind`, blob, 'application/octet-stream', (p) => ui && ui.set('Uploading scanner file…', at(85 + p * 0.1)));
@@ -238,7 +257,7 @@ async function saveArtwork({ existing, title, description, active, imageFile, vi
 
     if (imageFile) {
       ui.set('Compiling tracking data…', 3);
-      const img = await loadImage(URL.createObjectURL(prepared.blob));
+      const img = await shrinkForTracking(await loadImage(URL.createObjectURL(prepared.blob)));
       const mind = await compileTargets([img], (p) => ui.set(`Compiling tracking data… ${Math.round(p)}%`, 3 + p * 0.3));
       ui.set('Uploading image…', 35);
       imageUrl = await uploadFile(`${folder}/image.jpg`, prepared.blob, 'image/jpeg', (p) => ui.set('Uploading image…', 35 + p * 0.05));

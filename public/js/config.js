@@ -16,6 +16,10 @@ export const CONFIG = {
   // How many consecutive frames must recognise the art before it is "found" (lower = faster, a bit less safe).
   warmupTolerance: 4,
 
+  // Tracking images are shrunk to this many pixels (longest side) before MindAR learns them.
+  // Smaller = faster camera start and lighter scanner file; 800 is plenty for phone cameras.
+  trackingImageMax: 800,
+
   // Libraries (loaded from CDNs in the visitor's browser). Keep the MindAR version identical in
   // the importmap in index.html — the compiled .mind files must match the runtime version.
   compilerUrl: 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js',

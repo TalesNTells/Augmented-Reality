@@ -204,7 +204,10 @@ main { flex: 1; display: flex; flex-direction: column; }
 /* ---------- AR stage ---------- */
 .stage { position: fixed; inset: 0; z-index: 150; background: #000; overflow: hidden; touch-action: none; }
 .stage__view { position: absolute; inset: 0; overflow: hidden; }
-.stage__view video { object-fit: cover; }
+.stage__view { transform-origin: 50% 50%; will-change: transform; }
+/* MindAR sizes the camera <video> wider than the screen and shifts it left to centre it ("cover").
+   The global `max-width: 100%` must NOT apply here or the picture is squeezed into a strip. */
+.stage__view video, .stage__view canvas { max-width: none !important; max-height: none !important; }
 .stage__view canvas { position: absolute; inset: 0; }
 .stage__top { position: absolute; z-index: 5; inset: 0 0 auto 0; display: flex; align-items: center; justify-content: space-between; padding: max(12px, env(safe-area-inset-top)) 16px 12px; background: linear-gradient(to bottom, rgb(0 0 0 / 0.65), transparent); }
 .stage__top .logo { height: 40px; }
@@ -239,6 +242,15 @@ main { flex: 1; display: flex; flex-direction: column; }
 .stage__hint { position: absolute; z-index: 4; left: 0; right: 0; top: calc(46% + min(36vw, 26vh, 170px) * 4 / 3 + 30px); text-align: center; padding: 0 24px; color: #fff; font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; font-weight: 700; text-shadow: 0 2px 12px rgb(0 0 0 / 0.8); transition: opacity 0.4s; }
 .stage__hint[data-hidden="true"] { opacity: 0; }
 @media (max-height: 560px) { .stage__hint { display: none; } }
+
+/* zoom + focus controls */
+.zoombar { position: absolute; z-index: 6; left: 50%; transform: translateX(-50%); bottom: calc(max(20px, env(safe-area-inset-bottom)) + 74px); display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 999px; background: rgb(0 0 0 / 0.5); border: 1px solid rgb(255 255 255 / 0.18); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); color: #fff; }
+.zoombar .zb { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgb(255 255 255 / 0.25); background: transparent; color: #fff; font-size: 20px; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+.zoombar .zb:active { background: rgb(255 255 255 / 0.15); }
+.zoombar input[type=range] { width: min(40vw, 190px); accent-color: rgb(var(--accent)); }
+.zoombar .zl { min-width: 3.2em; text-align: right; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; }
+.focus-ring { position: absolute; z-index: 6; width: 76px; height: 76px; margin: -38px 0 0 -38px; border: 2px solid #fff; border-radius: 50%; pointer-events: none; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35); animation: focus-pop 0.9s ease-out forwards; }
+@keyframes focus-pop { 0% { transform: scale(1.5); opacity: 0; } 25% { opacity: 1; } 60% { transform: scale(1); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
 
 .stage__loading { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: #050505; color: #fff; text-align: center; padding: 24px; transition: opacity 0.5s; }
 .stage__loading[data-done="true"] { opacity: 0; pointer-events: none; }

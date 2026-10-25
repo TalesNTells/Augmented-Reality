@@ -15,12 +15,16 @@
     /* no-flash theme, identical to the main site */
     (function () { try { if (localStorage.getItem('theme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) {} })();
   </script>
+  <!-- Start downloading the AR engine while the visitor is still reading the page -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.module.js" crossorigin />
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js" crossorigin />
   <!-- AR libraries. MindAR version here must match compilerUrl in /js/config.js -->
   <script type="importmap">
     {
       "imports": {
-        "three": "https://unpkg.com/three@0.147.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.147.0/examples/jsm/",
+        "three": "https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.147.0/examples/jsm/",
         "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
       }
     }
@@ -91,6 +95,12 @@
     </div>
     <div class="reticle" id="reticle" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     <div class="stage__hint" id="hint">Point your camera at the artwork</div>
+    <div class="zoombar" id="zoomBar" hidden>
+      <button class="zb" id="zoomOut" type="button" aria-label="Zoom out">&minus;</button>
+      <input id="zoomRange" type="range" min="1" max="3" step="0.1" value="1" aria-label="Zoom" />
+      <button class="zb" id="zoomIn" type="button" aria-label="Zoom in">+</button>
+      <span class="zl" id="zoomLabel">1.0&times;</span>
+    </div>
     <div class="stage__bottom">
       <div class="stage__bar">
         <div class="chip" id="chip" data-state="scanning"><i class="dot"></i><span id="chipText">Looking for the art…</span></div>
